@@ -1,0 +1,2957 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "Les bancs",
+		"version": "0.1.0",
+		"summary": "Les établissements de secteur d'une adresse en France, la fiche de chaque établissement, les classements et la carte scolaire, en JSON. Sans clé, sans compte.",
+		"description": "Une adresse mène à ses établissements de secteur, de la maternelle au lycée, et chaque établissement a sa fiche : effectifs, IPS, résultats au brevet et au bac, note sur 10, particularités, formations Parcoursup.\nChaque réponse porte la même enveloppe (source, served_by, terms, documentation, notice) ; null veut dire que la source ne le dit pas.\n\nLes mêmes faits sont servis en texte par un serveur MCP, à https://lesbancs.fr/mcp.",
+		"contact": {
+			"name": "Les bancs",
+			"url": "https://lesbancs.fr"
+		},
+		"license": {
+			"name": "Licence Ouverte 2.0 (Etalab)",
+			"url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/"
+		},
+		"x-licenses": [
+			{
+				"name": "Licence Ouverte 2.0 (Etalab)",
+				"url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/"
+			},
+			{
+				"name": "Open Database License (ODbL)",
+				"url": "https://opendatacommons.org/licenses/odbl/1-0/",
+				"scope": "particularities (ONISEP)"
+			}
+		],
+		"x-stability": "Additive : un champ peut apparaître, aucun ne disparaît ni ne change de sens sous un appelant, et une adresse ne bouge pas. Aucun numéro de version, nulle part.",
+		"x-rate-limit": "Aucune borne de débit. Le site lit une base D1 et range chaque réponse une journée au bord : une aspiration ne coûte qu'un rendu par adresse."
+	},
+	"servers": [
+		{
+			"url": "https://lesbancs.fr"
+		}
+	],
+	"externalDocs": {
+		"description": "La documentation, en français.",
+		"url": "https://lesbancs.fr/api"
+	},
+	"security": [],
+	"x-mcp": {
+		"endpoint": "https://lesbancs.fr/mcp",
+		"alias": "https://lesbancs.fr/api/mcp",
+		"server": "lesbancs",
+		"protocol_versions": [
+			"2026-07-28",
+			"2025-11-25",
+			"2025-06-18",
+			"2025-03-26"
+		],
+		"tools": [
+			"get_french_school_sectors",
+			"get_french_school",
+			"get_french_commune_schools",
+			"get_french_school_ranking"
+		],
+		"registry": "fr.lesbancs/lesbancs"
+	},
+	"paths": {
+		"/api/address": {
+			"get": {
+				"operationId": "getAddress",
+				"summary": "Les établissements de secteur d'une adresse, niveau par niveau : la même chose que la page /adresse?q=.",
+				"parameters": [
+					{
+						"name": "q",
+						"in": "query",
+						"required": true,
+						"description": "L'adresse en toutes lettres, trois signes au moins. Une commune seule rend levels à null et son adresse machine.",
+						"schema": {
+							"type": "string",
+							"minLength": 3
+						},
+						"example": "60 rue Pasteur, Vitry-sur-Seine"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "L'adresse est lue à la Base Adresse Nationale.",
+						"headers": {
+							"ETag": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "Faible. If-None-Match est honoré, en liste et avec le joker."
+							},
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc ; next et prev sur une collection paginée."
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Address"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "Rien n'a changé depuis l'ETag envoyé."
+					},
+					"400": {
+						"description": "q manque ou compte moins de trois signes.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Aucune adresse assez sûre.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"405": {
+						"description": "La méthode n'est ni GET, ni HEAD, ni OPTIONS.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "La Base Adresse Nationale ou la base ne répond pas.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							},
+							"Retry-After": {
+								"schema": {
+									"type": "integer"
+								},
+								"description": "Secondes à attendre, 60."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/school/{uai}": {
+			"get": {
+				"operationId": "getSchool",
+				"summary": "La fiche entière d'un établissement.",
+				"parameters": [
+					{
+						"name": "uai",
+						"in": "path",
+						"required": true,
+						"description": "L'UAI de l'annuaire de l'éducation, sept chiffres et une lettre, insensible à la casse.",
+						"schema": {
+							"type": "string",
+							"pattern": "^[0-9]{7}[A-Za-z]$"
+						},
+						"example": "0942434K"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "L'établissement est ouvert.",
+						"headers": {
+							"ETag": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "Faible. If-None-Match est honoré, en liste et avec le joker."
+							},
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc ; next et prev sur une collection paginée."
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SchoolRecord"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "Rien n'a changé depuis l'ETag envoyé."
+					},
+					"400": {
+						"description": "L'UAI est illisible.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Aucun établissement ouvert ne porte cet UAI.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"405": {
+						"description": "La méthode n'est ni GET, ni HEAD, ni OPTIONS.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "La base ne répond pas : réessayer plus tard, rien ne manque.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							},
+							"Retry-After": {
+								"schema": {
+									"type": "integer"
+								},
+								"description": "Secondes à attendre, 60."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/commune/{insee}": {
+			"get": {
+				"operationId": "getMunicipality",
+				"summary": "Les établissements d'une commune, niveau par niveau, et sa carte scolaire.",
+				"parameters": [
+					{
+						"name": "insee",
+						"in": "path",
+						"required": true,
+						"description": "Code INSEE, cinq caractères (2A et 2B en Corse). Paris, Lyon et Marseille comptent leurs arrondissements.",
+						"schema": {
+							"type": "string",
+							"pattern": "^[0-9][0-9ABab][0-9]{3}$"
+						},
+						"example": "49007"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "La commune existe.",
+						"headers": {
+							"ETag": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "Faible. If-None-Match est honoré, en liste et avec le joker."
+							},
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc ; next et prev sur une collection paginée."
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Municipality"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "Rien n'a changé depuis l'ETag envoyé."
+					},
+					"400": {
+						"description": "Le code INSEE est illisible.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Aucune commune ne porte ce code.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"405": {
+						"description": "La méthode n'est ni GET, ni HEAD, ni OPTIONS.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "La base ne répond pas : réessayer plus tard, rien ne manque.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							},
+							"Retry-After": {
+								"schema": {
+									"type": "integer"
+								},
+								"description": "Secondes à attendre, 60."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/ranking/{type}": {
+			"get": {
+				"operationId": "getRanking",
+				"summary": "Un classement, par pages. 40 candidats au moins pour la France, 20 pour un département ou une ville, comme les pages.",
+				"parameters": [
+					{
+						"name": "type",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"colleges",
+								"lycees",
+								"lycees-professionnels"
+							]
+						},
+						"description": "colleges : brevet ; lycees : bac général et technologique ; lycees-professionnels : bac professionnel."
+					},
+					{
+						"name": "dep",
+						"in": "query",
+						"description": "Un département. Sans dep ni insee, la France.",
+						"schema": {
+							"type": "string",
+							"pattern": "^([0-9]{2}|2[ABab]|97[1-6])$"
+						},
+						"example": "49"
+					},
+					{
+						"name": "insee",
+						"in": "query",
+						"description": "Une commune, arrondissements compris. Elle l'emporte sur dep.",
+						"schema": {
+							"type": "string",
+							"pattern": "^[0-9][0-9ABab][0-9]{3}$"
+						}
+					},
+					{
+						"name": "sector",
+						"in": "query",
+						"description": "Illisible, il retombe sur all.",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"all",
+								"public",
+								"private"
+							],
+							"default": "all"
+						}
+					},
+					{
+						"name": "sort",
+						"in": "query",
+						"description": "Illisible, il retombe sur score. Sans note dans la base, le classement suit le taux de réussite, et sort le dit.",
+						"schema": {
+							"type": "string",
+							"enum": [
+								"score",
+								"pass-rate",
+								"value-added"
+							],
+							"default": "score"
+						}
+					},
+					{
+						"name": "criteria",
+						"in": "query",
+						"description": "Des particularités séparées par des virgules, toutes à la fois. Celles que la page du classement ne propose pas sont ignorées, et criteria dit celles qui ont servi. colleges : internat, segpa, ulis, section-europeenne, section-internationale, cham, section-sportive, sport-etudes, chinois, japonais, langue-regionale ; lycees : internat, ulis, section-europeenne, section-internationale, bachibac, abibac, esabac, section-sportive, sport-etudes, chinois, japonais, langue-regionale, agricole ; lycees-professionnels : internat, ulis, section-europeenne, section-sportive, agricole.",
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "limit",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"default": 1000,
+							"maximum": 12000
+						},
+						"description": "Illisible, il retombe sur le défaut."
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"schema": {
+							"type": "integer",
+							"default": 0
+						},
+						"description": "Au-delà de la fin, la liste est vide et more faux : jamais 404."
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "La page demandée, avec page.total et les adresses absolues de la suivante et de la précédente.",
+						"headers": {
+							"ETag": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "Faible. If-None-Match est honoré, en liste et avec le joker."
+							},
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc ; next et prev sur une collection paginée."
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ranking"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "Rien n'a changé depuis l'ETag envoyé."
+					},
+					"400": {
+						"description": "Le département ou le code INSEE est illisible.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Le classement n'existe pas, ou la commune.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"405": {
+						"description": "La méthode n'est ni GET, ni HEAD, ni OPTIONS.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "La base ne répond pas : réessayer plus tard, rien ne manque.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							},
+							"Retry-After": {
+								"schema": {
+									"type": "integer"
+								},
+								"description": "Secondes à attendre, 60."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/sectors/{dep}/{level}": {
+			"get": {
+				"operationId": "getSectors",
+				"summary": "Les secteurs dessinés d'un département et d'un niveau, en GeoJSON (FeatureCollection, enveloppe en membres étrangers).",
+				"parameters": [
+					{
+						"name": "dep",
+						"in": "path",
+						"required": true,
+						"description": "Code du département : 01 à 95, 2A, 2B, 971 à 976.",
+						"schema": {
+							"type": "string",
+							"pattern": "^([0-9]{2}|2[ABab]|97[1-6])$"
+						},
+						"example": "49"
+					},
+					{
+						"name": "level",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"nursery-school",
+								"primary-school",
+								"middle-school",
+								"high-school"
+							]
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Au moins un secteur est dessiné.",
+						"headers": {
+							"ETag": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "Faible. If-None-Match est honoré, en liste et avec le joker."
+							},
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc ; next et prev sur une collection paginée."
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Sectors"
+								}
+							}
+						}
+					},
+					"304": {
+						"description": "Rien n'a changé depuis l'ETag envoyé."
+					},
+					"400": {
+						"description": "Le département ou le niveau est illisible.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Aucun secteur de ce niveau n'est dessiné dans ce département.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"405": {
+						"description": "La méthode n'est ni GET, ni HEAD, ni OPTIONS.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "La base ne répond pas : réessayer plus tard, rien ne manque.",
+						"headers": {
+							"Link": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "service-desc et service-doc, sur un refus aussi."
+							},
+							"Retry-After": {
+								"schema": {
+									"type": "integer"
+								},
+								"description": "Secondes à attendre, 60."
+							}
+						},
+						"content": {
+							"application/problem+json": {
+								"schema": {
+									"$ref": "#/components/schemas/Problem"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/openapi.json": {
+			"get": {
+				"operationId": "getContract",
+				"summary": "Ce contrat, généré depuis le code.",
+				"responses": {
+					"200": {
+						"description": "OpenAPI 3.1."
+					},
+					"304": {
+						"description": "Rien n'a changé depuis l'ETag envoyé."
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"School": {
+				"type": "object",
+				"required": [
+					"uai",
+					"name",
+					"level",
+					"kind",
+					"status",
+					"insee",
+					"url",
+					"api_url"
+				],
+				"properties": {
+					"uai": {
+						"type": "string",
+						"pattern": "^[0-9]{7}[A-Z]$"
+					},
+					"name": {
+						"type": "string"
+					},
+					"level": {
+						"type": "string",
+						"enum": [
+							"nursery_school",
+							"primary_school",
+							"middle_school",
+							"high_school",
+							"vocational_high_school",
+							"higher_education"
+						]
+					},
+					"kind": {
+						"type": "string",
+						"description": "La nature, en français, telle que le site l'écrit : « Collège », « Lycée polyvalent »."
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"public",
+							"private"
+						]
+					},
+					"contract": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "« sous contrat » ou « hors contrat » pour le privé, tel quel."
+					},
+					"priority_education": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "REP ou REP+."
+					},
+					"address": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"postal_code": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"insee": {
+						"type": "string"
+					},
+					"city": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"lat": {
+						"type": [
+							"number",
+							"null"
+						]
+					},
+					"lon": {
+						"type": [
+							"number",
+							"null"
+						]
+					},
+					"distance_km": {
+						"type": "number",
+						"description": "À vol d'oiseau, présente quand la lecture la mesure."
+					},
+					"students": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"ips": {
+						"type": [
+							"number",
+							"null"
+						],
+						"description": "Indice de position sociale."
+					},
+					"main_exam": {
+						"type": [
+							"object",
+							"null"
+						],
+						"description": "Le brevet, sinon le bac général et technologique, sinon le bac professionnel.",
+						"properties": {
+							"exam": {
+								"type": "string",
+								"enum": [
+									"brevet",
+									"bac",
+									"bac-pro"
+								]
+							},
+							"session": {
+								"type": "string"
+							},
+							"candidates": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"pass_rate": {
+								"type": [
+									"number",
+									"null"
+								],
+								"description": "En %."
+							},
+							"honours_rate": {
+								"type": [
+									"number",
+									"null"
+								],
+								"description": "En %."
+							},
+							"value_added_points": {
+								"type": [
+									"number",
+									"null"
+								],
+								"description": "Valeur ajoutée de la DEPP, en points."
+							},
+							"score_out_of_10": {
+								"type": [
+									"number",
+									"null"
+								],
+								"description": "La note du site, au centième : https://lesbancs.fr/classement/methode"
+							},
+							"rank_in_france": {
+								"type": [
+									"object",
+									"null"
+								],
+								"properties": {
+									"rank": {
+										"type": "integer"
+									},
+									"of": {
+										"type": "integer"
+									}
+								}
+							}
+						}
+					},
+					"url": {
+						"type": "string",
+						"format": "uri",
+						"description": "La page du site."
+					},
+					"api_url": {
+						"type": "string",
+						"format": "uri",
+						"description": "La même chose en JSON."
+					}
+				}
+			},
+			"SchoolRecord": {
+				"type": "object",
+				"description": "Les champs de School, puis la fiche.",
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/School"
+					}
+				],
+				"properties": {
+					"academy": {
+						"type": "object",
+						"properties": {
+							"code": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"name": {
+								"type": [
+									"string",
+									"null"
+								]
+							}
+						}
+					},
+					"department": {
+						"type": "object",
+						"properties": {
+							"code": {
+								"type": "string"
+							},
+							"name": {
+								"type": [
+									"string",
+									"null"
+								]
+							}
+						}
+					},
+					"contact": {
+						"type": "object",
+						"properties": {
+							"phone": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"website": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"email": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"onisep_url": {
+								"type": [
+									"string",
+									"null"
+								]
+							}
+						}
+					},
+					"flags": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Les drapeaux de l'annuaire, tels quels."
+					},
+					"ips": {
+						"type": [
+							"object",
+							"null"
+						],
+						"properties": {
+							"value": {
+								"type": [
+									"number",
+									"null"
+								]
+							},
+							"school_year": {
+								"type": "string"
+							},
+							"general_technological": {
+								"type": [
+									"number",
+									"null"
+								]
+							},
+							"vocational": {
+								"type": [
+									"number",
+									"null"
+								]
+							},
+							"averages_among": {
+								"type": "string",
+								"enum": [
+									"public",
+									"private"
+								],
+								"description": "Les moyennes sont celles du même statut."
+							},
+							"national": {
+								"type": [
+									"number",
+									"null"
+								]
+							},
+							"academic": {
+								"type": [
+									"number",
+									"null"
+								]
+							},
+							"departmental": {
+								"type": [
+									"number",
+									"null"
+								]
+							}
+						}
+					},
+					"enrolment": {
+						"type": [
+							"object",
+							"null"
+						],
+						"properties": {
+							"school_year": {
+								"type": "string"
+							},
+							"students": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"classes": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"nursery_students": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"elementary_students": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"ulis_students": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"segpa_students": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"sixth_grade_students": {
+								"type": [
+									"integer",
+									"null"
+								],
+								"description": "Élèves de sixième."
+							}
+						}
+					},
+					"results": {
+						"type": "object",
+						"properties": {
+							"brevet": {
+								"type": [
+									"object",
+									"null"
+								],
+								"properties": {
+									"session": {
+										"type": "string"
+									},
+									"candidates": {
+										"type": [
+											"integer",
+											"null"
+										]
+									},
+									"pass_rate": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"honours_rate": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"department_average": {
+										"type": [
+											"object",
+											"null"
+										],
+										"properties": {
+											"candidates": {
+												"type": [
+													"integer",
+													"null"
+												]
+											},
+											"pass_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"honours_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											}
+										}
+									},
+									"france_average": {
+										"type": [
+											"object",
+											"null"
+										],
+										"properties": {
+											"candidates": {
+												"type": [
+													"integer",
+													"null"
+												]
+											},
+											"pass_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"honours_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											}
+										}
+									},
+									"value_added_points": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"written_average_out_of_20": {
+										"type": [
+											"number",
+											"null"
+										],
+										"description": "Au brevet, la note moyenne à l'écrit."
+									},
+									"access_rate": {
+										"type": [
+											"number",
+											"null"
+										],
+										"description": "Taux d'accès à l'examen dans l'établissement, en %."
+									},
+									"score": {
+										"type": [
+											"object",
+											"null"
+										],
+										"description": "La note sur 10 du site et ses trois sous-notes. Aucune note sous 30 candidats. Méthode : https://lesbancs.fr/classement/methode",
+										"properties": {
+											"value": {
+												"type": "number"
+											},
+											"results": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"progress": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"pathway": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"rank_in_france": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												}
+											},
+											"rank_in_department": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												}
+											},
+											"rank_among_same_status": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												},
+												"description": "Parmi les établissements du même statut, public ou privé."
+											},
+											"trend_one_year": {
+												"type": [
+													"number",
+													"null"
+												],
+												"description": "Ce que la note a gagné ou perdu en un an."
+											}
+										}
+									},
+									"history": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"session": {
+													"type": "string"
+												},
+												"candidates": {
+													"type": [
+														"integer",
+														"null"
+													]
+												},
+												"pass_rate": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"honours_rate": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"department_average": {
+													"type": [
+														"object",
+														"null"
+													],
+													"properties": {
+														"candidates": {
+															"type": [
+																"integer",
+																"null"
+															]
+														},
+														"pass_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														},
+														"honours_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														}
+													}
+												},
+												"france_average": {
+													"type": [
+														"object",
+														"null"
+													],
+													"properties": {
+														"candidates": {
+															"type": [
+																"integer",
+																"null"
+															]
+														},
+														"pass_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														},
+														"honours_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														}
+													}
+												}
+											}
+										},
+										"description": "Toutes les sessions, la plus récente d'abord."
+									}
+								}
+							},
+							"bac_general_technological": {
+								"type": [
+									"object",
+									"null"
+								],
+								"properties": {
+									"session": {
+										"type": "string"
+									},
+									"candidates": {
+										"type": [
+											"integer",
+											"null"
+										]
+									},
+									"pass_rate": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"honours_rate": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"department_average": {
+										"type": [
+											"object",
+											"null"
+										],
+										"properties": {
+											"candidates": {
+												"type": [
+													"integer",
+													"null"
+												]
+											},
+											"pass_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"honours_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											}
+										}
+									},
+									"france_average": {
+										"type": [
+											"object",
+											"null"
+										],
+										"properties": {
+											"candidates": {
+												"type": [
+													"integer",
+													"null"
+												]
+											},
+											"pass_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"honours_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											}
+										}
+									},
+									"value_added_points": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"written_average_out_of_20": {
+										"type": [
+											"number",
+											"null"
+										],
+										"description": "Au brevet, la note moyenne à l'écrit."
+									},
+									"access_rate": {
+										"type": [
+											"number",
+											"null"
+										],
+										"description": "Taux d'accès à l'examen dans l'établissement, en %."
+									},
+									"score": {
+										"type": [
+											"object",
+											"null"
+										],
+										"description": "La note sur 10 du site et ses trois sous-notes. Aucune note sous 30 candidats. Méthode : https://lesbancs.fr/classement/methode",
+										"properties": {
+											"value": {
+												"type": "number"
+											},
+											"results": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"progress": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"pathway": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"rank_in_france": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												}
+											},
+											"rank_in_department": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												}
+											},
+											"rank_among_same_status": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												},
+												"description": "Parmi les établissements du même statut, public ou privé."
+											},
+											"trend_one_year": {
+												"type": [
+													"number",
+													"null"
+												],
+												"description": "Ce que la note a gagné ou perdu en un an."
+											}
+										}
+									},
+									"history": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"session": {
+													"type": "string"
+												},
+												"candidates": {
+													"type": [
+														"integer",
+														"null"
+													]
+												},
+												"pass_rate": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"honours_rate": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"department_average": {
+													"type": [
+														"object",
+														"null"
+													],
+													"properties": {
+														"candidates": {
+															"type": [
+																"integer",
+																"null"
+															]
+														},
+														"pass_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														},
+														"honours_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														}
+													}
+												},
+												"france_average": {
+													"type": [
+														"object",
+														"null"
+													],
+													"properties": {
+														"candidates": {
+															"type": [
+																"integer",
+																"null"
+															]
+														},
+														"pass_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														},
+														"honours_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														}
+													}
+												}
+											}
+										},
+										"description": "Toutes les sessions, la plus récente d'abord."
+									}
+								}
+							},
+							"bac_professional": {
+								"type": [
+									"object",
+									"null"
+								],
+								"properties": {
+									"session": {
+										"type": "string"
+									},
+									"candidates": {
+										"type": [
+											"integer",
+											"null"
+										]
+									},
+									"pass_rate": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"honours_rate": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"department_average": {
+										"type": [
+											"object",
+											"null"
+										],
+										"properties": {
+											"candidates": {
+												"type": [
+													"integer",
+													"null"
+												]
+											},
+											"pass_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"honours_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											}
+										}
+									},
+									"france_average": {
+										"type": [
+											"object",
+											"null"
+										],
+										"properties": {
+											"candidates": {
+												"type": [
+													"integer",
+													"null"
+												]
+											},
+											"pass_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"honours_rate": {
+												"type": [
+													"number",
+													"null"
+												]
+											}
+										}
+									},
+									"value_added_points": {
+										"type": [
+											"number",
+											"null"
+										]
+									},
+									"written_average_out_of_20": {
+										"type": [
+											"number",
+											"null"
+										],
+										"description": "Au brevet, la note moyenne à l'écrit."
+									},
+									"access_rate": {
+										"type": [
+											"number",
+											"null"
+										],
+										"description": "Taux d'accès à l'examen dans l'établissement, en %."
+									},
+									"score": {
+										"type": [
+											"object",
+											"null"
+										],
+										"description": "La note sur 10 du site et ses trois sous-notes. Aucune note sous 30 candidats. Méthode : https://lesbancs.fr/classement/methode",
+										"properties": {
+											"value": {
+												"type": "number"
+											},
+											"results": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"progress": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"pathway": {
+												"type": [
+													"number",
+													"null"
+												]
+											},
+											"rank_in_france": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												}
+											},
+											"rank_in_department": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												}
+											},
+											"rank_among_same_status": {
+												"type": [
+													"object",
+													"null"
+												],
+												"properties": {
+													"rank": {
+														"type": "integer"
+													},
+													"of": {
+														"type": "integer"
+													}
+												},
+												"description": "Parmi les établissements du même statut, public ou privé."
+											},
+											"trend_one_year": {
+												"type": [
+													"number",
+													"null"
+												],
+												"description": "Ce que la note a gagné ou perdu en un an."
+											}
+										}
+									},
+									"history": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"session": {
+													"type": "string"
+												},
+												"candidates": {
+													"type": [
+														"integer",
+														"null"
+													]
+												},
+												"pass_rate": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"honours_rate": {
+													"type": [
+														"number",
+														"null"
+													]
+												},
+												"department_average": {
+													"type": [
+														"object",
+														"null"
+													],
+													"properties": {
+														"candidates": {
+															"type": [
+																"integer",
+																"null"
+															]
+														},
+														"pass_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														},
+														"honours_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														}
+													}
+												},
+												"france_average": {
+													"type": [
+														"object",
+														"null"
+													],
+													"properties": {
+														"candidates": {
+															"type": [
+																"integer",
+																"null"
+															]
+														},
+														"pass_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														},
+														"honours_rate": {
+															"type": [
+																"number",
+																"null"
+															]
+														}
+													}
+												}
+											}
+										},
+										"description": "Toutes les sessions, la plus récente d'abord."
+									}
+								}
+							}
+						}
+					},
+					"particularities": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"family": {
+									"type": "string"
+								},
+								"label": {
+									"type": "string"
+								},
+								"detail": {
+									"type": [
+										"string",
+										"null"
+									]
+								},
+								"source": {
+									"type": "string",
+									"description": "Le jeu ou la page d'où vient la ligne."
+								},
+								"date": {
+									"type": [
+										"string",
+										"null"
+									]
+								},
+								"licence": {
+									"type": "string",
+									"description": "Licence Ouverte, ODbL (ONISEP) ou source citée."
+								}
+							}
+						}
+					},
+					"parcoursup_courses": {
+						"type": "array",
+						"items": {
+							"type": "object"
+						}
+					},
+					"sector_municipalities": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"insee": {
+									"type": "string"
+								},
+								"name": {
+									"type": "string"
+								},
+								"url": {
+									"type": "string",
+									"format": "uri"
+								},
+								"api_url": {
+									"type": "string",
+									"format": "uri"
+								}
+							}
+						},
+						"description": "Les communes que la carte scolaire rattache à ce collège ou ce lycée, 90 au plus."
+					},
+					"nearby": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/School"
+						}
+					},
+					"source": {
+						"type": "string",
+						"description": "D'où vient la donnée : la phrase qu'une citation recopie."
+					},
+					"served_by": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"url": {
+								"type": "string",
+								"format": "uri"
+							}
+						}
+					},
+					"terms": {
+						"type": "string",
+						"description": "Licence Ouverte 2.0, et ODbL pour les particularités ONISEP."
+					},
+					"documentation": {
+						"type": "string",
+						"format": "uri"
+					},
+					"notice": {
+						"type": "string",
+						"description": "Aucun secteur n'est deviné : un secteur absent est un secteur non publié, et la réponse le dit par sector_basis à null et par map_published. Aucune note n'existe pour une école, et aucun résultat public n'existe par école. La note sur 10 est calculée par le site à partir des résultats, de la valeur ajoutée et du parcours, sur trois sessions ; sa méthode est à https://lesbancs.fr/classement/methode. La carte scolaire des collèges est celle que le ministère publie (année 2025) ; en cas de doute, le conseil départemental ou la mairie tranchent."
+					}
+				}
+			},
+			"Level": {
+				"type": "object",
+				"required": [
+					"sector",
+					"sector_basis",
+					"map_year",
+					"shared_between",
+					"map_published",
+					"nearby"
+				],
+				"properties": {
+					"sector": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/School"
+						}
+					},
+					"sector_basis": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							"published_map",
+							"only_public_school_in_municipality",
+							"map_of_municipality",
+							"map_by_number",
+							"map_by_street",
+							"map_by_street_number_needed",
+							"drawn_zone",
+							null
+						],
+						"description": "Ce qui fait foi. null : aucun secteur n'est publié pour cette adresse, et aucun n'est deviné."
+					},
+					"map_year": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "L'année du document de la commune qui donne le secteur d'une école."
+					},
+					"shared_between": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Un secteur que la commune donne à plusieurs écoles sans les départager : les noms tels qu'elle les écrit."
+					},
+					"map_published": {
+						"type": [
+							"boolean",
+							"null"
+						],
+						"description": "La carte scolaire couvre-t-elle la commune ? null : la base ne le dit pas."
+					},
+					"sector_note": {
+						"type": [
+							"object",
+							"null"
+						],
+						"description": "Quand aucun secteur n'est publié, ce que l'autorité en dit : une commune qui ne sectorise pas ses écoles, un département qui ne publie pas sa carte des collèges et où la trouver.",
+						"properties": {
+							"text": {
+								"type": "string"
+							},
+							"url": {
+								"type": [
+									"string",
+									"null"
+								],
+								"format": "uri"
+							}
+						}
+					},
+					"nearby": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/School"
+						}
+					}
+				}
+			},
+			"Address": {
+				"type": "object",
+				"required": [
+					"query",
+					"address",
+					"municipality",
+					"levels",
+					"url",
+					"api_url"
+				],
+				"properties": {
+					"query": {
+						"type": "string"
+					},
+					"address": {
+						"type": "object",
+						"properties": {
+							"label": {
+								"type": "string"
+							},
+							"type": {
+								"type": "string",
+								"enum": [
+									"housenumber",
+									"street",
+									"locality",
+									"municipality"
+								]
+							},
+							"insee": {
+								"type": "string"
+							},
+							"city": {
+								"type": "string"
+							},
+							"street": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"number": {
+								"type": [
+									"integer",
+									"null"
+								]
+							},
+							"lat": {
+								"type": "number"
+							},
+							"lon": {
+								"type": "number"
+							},
+							"score": {
+								"type": "number"
+							}
+						}
+					},
+					"municipality": {
+						"type": "object",
+						"properties": {
+							"insee": {
+								"type": "string"
+							},
+							"name": {
+								"type": "string"
+							},
+							"url": {
+								"type": "string",
+								"format": "uri"
+							},
+							"api_url": {
+								"type": "string",
+								"format": "uri"
+							}
+						}
+					},
+					"levels": {
+						"type": [
+							"object",
+							"null"
+						],
+						"description": "null pour une commune : une commune n'a pas de secteur.",
+						"properties": {
+							"nursery_school": {
+								"$ref": "#/components/schemas/Level"
+							},
+							"primary_school": {
+								"$ref": "#/components/schemas/Level"
+							},
+							"middle_school": {
+								"$ref": "#/components/schemas/Level"
+							},
+							"high_school": {
+								"$ref": "#/components/schemas/Level"
+							},
+							"vocational_high_school": {
+								"$ref": "#/components/schemas/Level"
+							},
+							"higher_education": {
+								"type": "object",
+								"properties": {
+									"academies": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"code": {
+													"type": "string"
+												},
+												"name": {
+													"type": [
+														"string",
+														"null"
+													]
+												}
+											}
+										}
+									},
+									"non_selective_degrees_with_priority": {
+										"type": "integer",
+										"description": "Les licences et PASS qui donnent la priorité aux candidats de l'académie."
+									},
+									"nearest_parcoursup_courses": {
+										"type": "array",
+										"items": {
+											"type": "object"
+										}
+									}
+								}
+							}
+						}
+					},
+					"private_under_contract_nearby": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"$ref": "#/components/schemas/School"
+						}
+					},
+					"url": {
+						"type": "string",
+						"format": "uri"
+					},
+					"api_url": {
+						"type": "string",
+						"format": "uri"
+					},
+					"source": {
+						"type": "string",
+						"description": "D'où vient la donnée : la phrase qu'une citation recopie."
+					},
+					"served_by": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"url": {
+								"type": "string",
+								"format": "uri"
+							}
+						}
+					},
+					"terms": {
+						"type": "string",
+						"description": "Licence Ouverte 2.0, et ODbL pour les particularités ONISEP."
+					},
+					"documentation": {
+						"type": "string",
+						"format": "uri"
+					},
+					"notice": {
+						"type": "string",
+						"description": "Aucun secteur n'est deviné : un secteur absent est un secteur non publié, et la réponse le dit par sector_basis à null et par map_published. Aucune note n'existe pour une école, et aucun résultat public n'existe par école. La note sur 10 est calculée par le site à partir des résultats, de la valeur ajoutée et du parcours, sur trois sessions ; sa méthode est à https://lesbancs.fr/classement/methode. La carte scolaire des collèges est celle que le ministère publie (année 2025) ; en cas de doute, le conseil départemental ou la mairie tranchent."
+					}
+				}
+			},
+			"Municipality": {
+				"type": "object",
+				"properties": {
+					"insee": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"department": {
+						"type": "object",
+						"properties": {
+							"code": {
+								"type": "string"
+							},
+							"name": {
+								"type": [
+									"string",
+									"null"
+								]
+							}
+						}
+					},
+					"parent_insee": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"population": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"postal_code": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"lat": {
+						"type": [
+							"number",
+							"null"
+						]
+					},
+					"lon": {
+						"type": [
+							"number",
+							"null"
+						]
+					},
+					"arrondissements": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"insee": {
+									"type": "string"
+								},
+								"name": {
+									"type": "string"
+								},
+								"url": {
+									"type": "string",
+									"format": "uri"
+								},
+								"api_url": {
+									"type": "string",
+									"format": "uri"
+								}
+							}
+						}
+					},
+					"counts_by_level": {
+						"type": "object",
+						"properties": {
+							"nursery_school": {
+								"type": "integer"
+							},
+							"primary_school": {
+								"type": "integer"
+							},
+							"middle_school": {
+								"type": "integer"
+							},
+							"high_school": {
+								"type": "integer"
+							},
+							"vocational_high_school": {
+								"type": "integer"
+							},
+							"higher_education": {
+								"type": "integer"
+							}
+						}
+					},
+					"school_map": {
+						"type": "object",
+						"properties": {
+							"middle_school": {
+								"type": "boolean"
+							},
+							"high_school": {
+								"type": "boolean"
+							}
+						}
+					},
+					"schools": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/School"
+						}
+					},
+					"parcoursup_courses_count": {
+						"type": "integer"
+					},
+					"url": {
+						"type": "string",
+						"format": "uri"
+					},
+					"school_map_url": {
+						"type": [
+							"string",
+							"null"
+						],
+						"format": "uri"
+					},
+					"rankings": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"type": {
+									"type": "string"
+								},
+								"url": {
+									"type": "string",
+									"format": "uri"
+								},
+								"api_url": {
+									"type": "string",
+									"format": "uri"
+								}
+							}
+						}
+					},
+					"api_url": {
+						"type": "string",
+						"format": "uri"
+					},
+					"source": {
+						"type": "string",
+						"description": "D'où vient la donnée : la phrase qu'une citation recopie."
+					},
+					"served_by": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"url": {
+								"type": "string",
+								"format": "uri"
+							}
+						}
+					},
+					"terms": {
+						"type": "string",
+						"description": "Licence Ouverte 2.0, et ODbL pour les particularités ONISEP."
+					},
+					"documentation": {
+						"type": "string",
+						"format": "uri"
+					},
+					"notice": {
+						"type": "string",
+						"description": "Aucun secteur n'est deviné : un secteur absent est un secteur non publié, et la réponse le dit par sector_basis à null et par map_published. Aucune note n'existe pour une école, et aucun résultat public n'existe par école. La note sur 10 est calculée par le site à partir des résultats, de la valeur ajoutée et du parcours, sur trois sessions ; sa méthode est à https://lesbancs.fr/classement/methode. La carte scolaire des collèges est celle que le ministère publie (année 2025) ; en cas de doute, le conseil départemental ou la mairie tranchent."
+					}
+				}
+			},
+			"Ranking": {
+				"type": "object",
+				"properties": {
+					"ranking": {
+						"type": "string",
+						"enum": [
+							"colleges",
+							"lycees",
+							"lycees-professionnels"
+						]
+					},
+					"exam": {
+						"type": "string",
+						"enum": [
+							"brevet",
+							"bac",
+							"bac-pro"
+						]
+					},
+					"scope": {
+						"type": "object",
+						"properties": {
+							"kind": {
+								"type": "string",
+								"enum": [
+									"france",
+									"department",
+									"municipality"
+								]
+							},
+							"department": {
+								"type": [
+									"object",
+									"null"
+								]
+							},
+							"municipality": {
+								"type": [
+									"object",
+									"null"
+								]
+							}
+						}
+					},
+					"sort": {
+						"type": "string",
+						"enum": [
+							"score",
+							"pass-rate",
+							"value-added"
+						],
+						"description": "Le tri appliqué."
+					},
+					"sector": {
+						"type": "string",
+						"enum": [
+							"all",
+							"public",
+							"private"
+						]
+					},
+					"criteria": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"minimum_candidates": {
+						"type": "integer"
+					},
+					"session": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"rows": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"rank": {
+									"type": "integer",
+									"description": "Deux établissements à égalité partagent leur rang."
+								},
+								"school": {
+									"$ref": "#/components/schemas/School"
+								},
+								"exam": {
+									"type": "object",
+									"properties": {
+										"session": {
+											"type": "string"
+										},
+										"candidates": {
+											"type": [
+												"integer",
+												"null"
+											]
+										},
+										"pass_rate": {
+											"type": [
+												"number",
+												"null"
+											]
+										},
+										"honours_rate": {
+											"type": [
+												"number",
+												"null"
+											]
+										},
+										"value_added_points": {
+											"type": [
+												"number",
+												"null"
+											]
+										}
+									}
+								},
+								"score": {
+									"type": [
+										"object",
+										"null"
+									],
+									"description": "La note sur 10 du site et ses trois sous-notes. Aucune note sous 30 candidats. Méthode : https://lesbancs.fr/classement/methode",
+									"properties": {
+										"value": {
+											"type": "number"
+										},
+										"results": {
+											"type": [
+												"number",
+												"null"
+											]
+										},
+										"progress": {
+											"type": [
+												"number",
+												"null"
+											]
+										},
+										"pathway": {
+											"type": [
+												"number",
+												"null"
+											]
+										},
+										"rank_in_france": {
+											"type": [
+												"object",
+												"null"
+											],
+											"properties": {
+												"rank": {
+													"type": "integer"
+												},
+												"of": {
+													"type": "integer"
+												}
+											}
+										},
+										"rank_in_department": {
+											"type": [
+												"object",
+												"null"
+											],
+											"properties": {
+												"rank": {
+													"type": "integer"
+												},
+												"of": {
+													"type": "integer"
+												}
+											}
+										},
+										"rank_among_same_status": {
+											"type": [
+												"object",
+												"null"
+											],
+											"properties": {
+												"rank": {
+													"type": "integer"
+												},
+												"of": {
+													"type": "integer"
+												}
+											},
+											"description": "Parmi les établissements du même statut, public ou privé."
+										},
+										"trend_one_year": {
+											"type": [
+												"number",
+												"null"
+											],
+											"description": "Ce que la note a gagné ou perdu en un an."
+										}
+									}
+								}
+							}
+						}
+					},
+					"page": {
+						"type": "object",
+						"required": [
+							"total",
+							"limit",
+							"offset",
+							"more",
+							"next",
+							"previous"
+						],
+						"properties": {
+							"total": {
+								"type": "integer"
+							},
+							"limit": {
+								"type": "integer"
+							},
+							"offset": {
+								"type": "integer"
+							},
+							"more": {
+								"type": "boolean"
+							},
+							"next": {
+								"type": [
+									"string",
+									"null"
+								],
+								"format": "uri"
+							},
+							"previous": {
+								"type": [
+									"string",
+									"null"
+								],
+								"format": "uri"
+							}
+						}
+					},
+					"url": {
+						"type": "string",
+						"format": "uri"
+					},
+					"api_url": {
+						"type": "string",
+						"format": "uri"
+					},
+					"source": {
+						"type": "string",
+						"description": "D'où vient la donnée : la phrase qu'une citation recopie."
+					},
+					"served_by": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"url": {
+								"type": "string",
+								"format": "uri"
+							}
+						}
+					},
+					"terms": {
+						"type": "string",
+						"description": "Licence Ouverte 2.0, et ODbL pour les particularités ONISEP."
+					},
+					"documentation": {
+						"type": "string",
+						"format": "uri"
+					},
+					"notice": {
+						"type": "string",
+						"description": "Aucun secteur n'est deviné : un secteur absent est un secteur non publié, et la réponse le dit par sector_basis à null et par map_published. Aucune note n'existe pour une école, et aucun résultat public n'existe par école. La note sur 10 est calculée par le site à partir des résultats, de la valeur ajoutée et du parcours, sur trois sessions ; sa méthode est à https://lesbancs.fr/classement/methode. La carte scolaire des collèges est celle que le ministère publie (année 2025) ; en cas de doute, le conseil départemental ou la mairie tranchent."
+					}
+				}
+			},
+			"Sectors": {
+				"type": "object",
+				"description": "Un FeatureCollection de MultiPolygon, WGS 84.",
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"FeatureCollection"
+						]
+					},
+					"department": {
+						"type": "object"
+					},
+					"level": {
+						"type": "string",
+						"enum": [
+							"nursery_school",
+							"primary_school",
+							"middle_school",
+							"high_school",
+							"vocational_high_school",
+							"higher_education"
+						]
+					},
+					"features": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"type": {
+									"type": "string",
+									"enum": [
+										"Feature"
+									]
+								},
+								"properties": {
+									"type": "object",
+									"properties": {
+										"level": {
+											"type": "string",
+											"enum": [
+												"nursery_school",
+												"primary_school",
+												"middle_school",
+												"high_school",
+												"vocational_high_school",
+												"higher_education"
+											]
+										},
+										"uai": {
+											"type": "string",
+											"description": "Plusieurs UAI joints par +, un nom inconnu de l'annuaire préfixé de ?."
+										},
+										"name": {
+											"type": [
+												"string",
+												"null"
+											]
+										},
+										"map_date": {
+											"type": [
+												"string",
+												"null"
+											]
+										},
+										"schools": {
+											"type": "array",
+											"items": {
+												"type": "object"
+											}
+										},
+										"url": {
+											"type": [
+												"string",
+												"null"
+											],
+											"format": "uri"
+										}
+									}
+								},
+								"geometry": {
+									"type": "object"
+								}
+							}
+						}
+					},
+					"source": {
+						"type": "string",
+						"description": "D'où vient la donnée : la phrase qu'une citation recopie."
+					},
+					"served_by": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string"
+							},
+							"url": {
+								"type": "string",
+								"format": "uri"
+							}
+						}
+					},
+					"terms": {
+						"type": "string",
+						"description": "Licence Ouverte 2.0, et ODbL pour les particularités ONISEP."
+					},
+					"documentation": {
+						"type": "string",
+						"format": "uri"
+					},
+					"notice": {
+						"type": "string",
+						"description": "Aucun secteur n'est deviné : un secteur absent est un secteur non publié, et la réponse le dit par sector_basis à null et par map_published. Aucune note n'existe pour une école, et aucun résultat public n'existe par école. La note sur 10 est calculée par le site à partir des résultats, de la valeur ajoutée et du parcours, sur trois sessions ; sa méthode est à https://lesbancs.fr/classement/methode. La carte scolaire des collèges est celle que le ministère publie (année 2025) ; en cas de doute, le conseil départemental ou la mairie tranchent."
+					}
+				}
+			},
+			"Problem": {
+				"type": "object",
+				"description": "RFC 9457. type est une ancre de la page de documentation, qui répond.",
+				"required": [
+					"type",
+					"title",
+					"status",
+					"detail",
+					"instance"
+				],
+				"properties": {
+					"type": {
+						"type": "string",
+						"format": "uri",
+						"enum": [
+							"https://lesbancs.fr/api#invalid-query",
+							"https://lesbancs.fr/api#address-not-found",
+							"https://lesbancs.fr/api#geocoder-unavailable",
+							"https://lesbancs.fr/api#invalid-uai",
+							"https://lesbancs.fr/api#school-not-found",
+							"https://lesbancs.fr/api#invalid-insee-code",
+							"https://lesbancs.fr/api#municipality-not-found",
+							"https://lesbancs.fr/api#ranking-not-found",
+							"https://lesbancs.fr/api#invalid-department",
+							"https://lesbancs.fr/api#invalid-level",
+							"https://lesbancs.fr/api#sectors-not-published",
+							"https://lesbancs.fr/api#database-unavailable",
+							"https://lesbancs.fr/api#method-not-allowed",
+							"https://lesbancs.fr/api#not-found"
+						]
+					},
+					"title": {
+						"type": "string"
+					},
+					"status": {
+						"type": "integer"
+					},
+					"detail": {
+						"type": "string"
+					},
+					"instance": {
+						"type": "string"
+					},
+					"received": {
+						"description": "Ce qui a été reçu, quand cela aide à corriger."
+					},
+					"expected": {
+						"description": "La forme attendue."
+					},
+					"retry_after_seconds": {
+						"type": "integer"
+					}
+				}
+			}
+		}
+	}
+}

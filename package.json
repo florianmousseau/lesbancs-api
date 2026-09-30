@@ -1,0 +1,51 @@
+{
+	"name": "lesbancs",
+	"version": "0.1.0",
+	"description": "A French address: its catchment schools, nursery to high school, and each school's results. Official zero-dependency client for the lesbancs.fr API.",
+	"keywords": [
+		"france",
+		"school",
+		"carte-scolaire",
+		"college",
+		"lycee",
+		"ecole",
+		"catchment",
+		"education",
+		"open-data",
+		"brevet",
+		"baccalaureat",
+		"parcoursup"
+	],
+	"homepage": "https://github.com/florianmousseau/lesbancs-api#readme",
+	"bugs": {
+		"url": "https://github.com/florianmousseau/lesbancs-api/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/florianmousseau/lesbancs-api.git"
+	},
+	"license": "MIT",
+	"author": "Florian Mousseau",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./index.d.ts",
+			"default": "./index.js"
+		}
+	},
+	"main": "./index.js",
+	"types": "./index.d.ts",
+	"files": [
+		"index.js",
+		"index.d.ts",
+		"openapi.json",
+		"README.md",
+		"LICENSE"
+	],
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "node --test test/client.test.js"
+	}
+}
